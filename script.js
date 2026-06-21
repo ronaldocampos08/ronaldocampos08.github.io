@@ -2,11 +2,10 @@ const menuButton = document.querySelector(".menu-toggle");
 const navigation = document.querySelector(".main-nav");
 
 if (menuButton && navigation) {
-  const closeMenu = ({ returnFocus = false } = {}) => {
+  const closeMenu = () => {
     menuButton.setAttribute("aria-expanded", "false");
     navigation.classList.remove("open");
     document.body.classList.remove("menu-open");
-    if (returnFocus) menuButton.focus();
   };
 
   menuButton.addEventListener("click", () => {
@@ -16,11 +15,12 @@ if (menuButton && navigation) {
     document.body.classList.toggle("menu-open", open);
   });
 
-  navigation.querySelectorAll("a").forEach((link) => link.addEventListener("click", () => closeMenu()));
+  navigation.querySelectorAll("a").forEach((link) => link.addEventListener("click", closeMenu));
 
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && navigation.classList.contains("open")) {
-      closeMenu({ returnFocus: true });
+      closeMenu();
+      menuButton.focus();
     }
   });
 }
@@ -34,63 +34,84 @@ document.querySelectorAll("[data-carousel]").forEach((carousel) => {
   const prevButton = carousel.querySelector("[data-carousel-prev]");
   const nextButton = carousel.querySelector("[data-carousel-next]");
   const dotsWrap = carousel.querySelector("[data-carousel-dots]");
-  const status = carousel.querySelector("[data-carousel-status]");
-  let current = slides.findIndex((slide) => slide.classList.contains("is-active"));
-  let touchStartX = 0;
-  current = current >= 0 ? current : 0;
+  let activeIndex = Math.max(0, slides.findIndex((slide) => slide.classList.contains("is-active")));
+  let startX = 0;
 
-  if (!slides.length || !prevButton || !nextButton || !dotsWrap) return;
+  const wrap = (index) => (index + slides.length) % slides.length;
 
-  const dots = slides.map((_, index) => {
-    const dot = document.createElement("button");
-    dot.type = "button";
-    dot.className = "carousel-dot";
-    dot.setAttribute("aria-label", `Mostrar imagen ${index + 1} de ${slides.length}`);
-    dot.addEventListener("click", () => showSlide(index));
-    dotsWrap.appendChild(dot);
-    return dot;
-  });
+  const render = () => {
+    slides.forEach((slide, index) => {
+      slide.classList.remove("is-active", "is-prev", "is-next");
+      slide.setAttribute("aria-hidden", "true");
 
-  const updateStatus = () => {
-    if (status) status.textContent = `Imagen ${current + 1} de ${slides.length}`;
+      if (index === activeIndex) {
+        slide.classList.add("is-active");
+        slide.removeAttribute("aria-hidden");
+      } else if (index === wrap(activeIndex - 1)) {
+        slide.classList.add("is-prev");
+      } else if (index === wrap(activeIndex + 1)) {
+        slide.classList.add("is-next");
+      }
+    });
+
+    if (dotsWrap) {
+      dotsWrap.querySelectorAll("button").forEach((dot, index) => {
+        dot.classList.toggle("is-active", index === activeIndex);
+        dot.setAttribute("aria-current", index === activeIndex ? "true" : "false");
+      });
+    }
   };
 
-  function showSlide(index) {
-    current = (index + slides.length) % slides.length;
-    slides.forEach((slide, slideIndex) => {
-      const active = slideIndex === current;
-      slide.classList.toggle("is-active", active);
-      slide.setAttribute("aria-hidden", String(!active));
+  if (dotsWrap) {
+    slides.forEach((_, index) => {
+      const dot = document.createElement("button");
+      dot.type = "button";
+      dot.setAttribute("aria-label", `Ver imagen ${index + 1}`);
+      dot.addEventListener("click", () => {
+        activeIndex = index;
+        render();
+      });
+      dotsWrap.appendChild(dot);
     });
-    dots.forEach((dot, dotIndex) => {
-      const active = dotIndex === current;
-      dot.classList.toggle("is-active", active);
-      dot.setAttribute("aria-current", active ? "true" : "false");
-    });
-    updateStatus();
   }
 
-  prevButton.addEventListener("click", () => showSlide(current - 1));
-  nextButton.addEventListener("click", () => showSlide(current + 1));
+  prevButton?.addEventListener("click", () => {
+    activeIndex = wrap(activeIndex - 1);
+    render();
+  });
+
+  nextButton?.addEventListener("click", () => {
+    activeIndex = wrap(activeIndex + 1);
+    render();
+  });
+
   carousel.addEventListener("keydown", (event) => {
     if (event.key === "ArrowLeft") {
       event.preventDefault();
-      showSlide(current - 1);
+      activeIndex = wrap(activeIndex - 1);
+      render();
     }
     if (event.key === "ArrowRight") {
       event.preventDefault();
-      showSlide(current + 1);
+      activeIndex = wrap(activeIndex + 1);
+      render();
     }
   });
+
   carousel.addEventListener("touchstart", (event) => {
-    touchStartX = event.changedTouches[0].clientX;
-  }, { passive: true });
-  carousel.addEventListener("touchend", (event) => {
-    const delta = event.changedTouches[0].clientX - touchStartX;
-    if (Math.abs(delta) > 45) showSlide(current + (delta < 0 ? 1 : -1));
+    startX = event.changedTouches[0].clientX;
   }, { passive: true });
 
-  showSlide(current);
+  carousel.addEventListener("touchend", (event) => {
+    const movement = event.changedTouches[0].clientX - startX;
+    if (Math.abs(movement) > 45) {
+      activeIndex = wrap(activeIndex + (movement < 0 ? 1 : -1));
+      render();
+    }
+  }, { passive: true });
+
+  carousel.setAttribute("tabindex", "0");
+  render();
 });
 
 const targets = document.querySelectorAll(".reveal-target");
